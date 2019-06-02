@@ -3,53 +3,55 @@ from keras.models import Model
 
 import matplotlib.pyplot as plt
 
-from keras import regularizers
+"""
+Model architecture definition
 
-#
-# BUILDING THE MODELS
-# Size of our encoded representation
-encoding_dim2 = 32 
+Encoder: 784->512->256->128->64->32
+Decoder: 32->64->128->256->512->784
 
-input_img2 = Input(shape=(784,))
+Autoencoder: Encoder->Decoder
+"""
+encoding_dim = 32   # array size for encoded representations
+
+input_img = Input(shape=(784,))
 
 # Encoding the image down to a 32-dim vector
-encoded2 = Dense(512, activation='relu')(input_img2)
-encoded2 = Dense(256, activation='relu')(encoded2)
-encoded2 = Dense(128, activation='relu')(encoded2)
-encoded2 = Dense(64, activation='relu')(encoded2)
-encoded2 = Dense(encoding_dim2, activation='relu')(encoded2)
+encoded = Dense(512, activation='relu')(input_img)
+encoded = Dense(256, activation='relu')(encoded)
+encoded = Dense(128, activation='relu')(encoded)
+encoded = Dense(64, activation='relu')(encoded)
+encoded = Dense(encoding_dim, activation='relu')(encoded)
 
 # Decoding the encoded image back to a 784-dim vector
-decoded2 = Dense(64, activation='relu')(encoded2)
-decoded2 = Dense(128, activation='relu')(decoded2)
-decoded2 = Dense(256, activation='relu')(decoded2)
-decoded2 = Dense(512, activation='relu')(decoded2)
-decoded2 = Dense(784, activation='sigmoid')(decoded2)
+decoded = Dense(64, activation='relu')(encoded)
+decoded = Dense(128, activation='relu')(decoded)
+decoded = Dense(256, activation='relu')(decoded)
+decoded = Dense(512, activation='relu')(decoded)
+decoded = Dense(784, activation='sigmoid')(decoded)
 
-# Model 1: The entire autoencoder mapped from input to ouput
-autoencoder2 = Model(input_img2, decoded2)
 
-# Model 2: The encoder part only
-encoder2 = Model(input_img2, encoded2)
+autoencoder = Model(input_img, decoded)
 
-# create a placeholder for an encoded (32-dimensional) input
-encoded_input2 = Input(shape=(encoding_dim2,))
+encoder = Model(input_img, encoded)
+
+# Placeholder for an encoded variables
+encoded_input = Input(shape=(encoding_dim,))
 
 # retrieve the decoding layers to recursively build the decoder part
-decoder_layer2_5 = autoencoder2.layers[-5]
-decoder_layer2_4 = autoencoder2.layers[-4]
-decoder_layer2_3 = autoencoder2.layers[-3]
-decoder_layer2_2 = autoencoder2.layers[-2]
-decoder_layer2_1 = autoencoder2.layers[-1]
+decoder_layer_5 = autoencoder.layers[-5]
+decoder_layer_4 = autoencoder.layers[-4]
+decoder_layer_3 = autoencoder.layers[-3]
+decoder_layer_2 = autoencoder.layers[-2]
+decoder_layer_1 = autoencoder.layers[-1]
 
 # Model 3: The decoder part only
-decoder2 = Model(encoded_input2, decoder_layer2_1(decoder_layer2_2(decoder_layer2_3(decoder_layer2_4(decoder_layer2_5(encoded_input2))))))
+decoder = Model(encoded_input, decoder_layer_1(decoder_layer_2(decoder_layer_3(decoder_layer_4(decoder_layer_5(encoded_input))))))
 
-autoencoder2.compile(optimizer='adadelta', loss="binary_crossentropy")
+autoencoder.compile(optimizer='adam', loss="binary_crossentropy")
 
 from keras.datasets import mnist
 import numpy as np
-(x_train, train_labels), (x_test, test_labels) = mnist.load_data()
+(x_train, y_train), (x_test, y_test) = mnist.load_data()
 
 x_train = x_train.astype('float32') / 255.
 x_test = x_test.astype('float32') / 255.
@@ -58,23 +60,25 @@ x_test = x_test.reshape((len(x_test), np.prod(x_test.shape[1:])))
 print(x_train.shape)
 print(x_test.shape)
 
-# Train the main model for 1000 epochs
-# Takes about 50 mins in colaboratory
-# We will export this model to the testing enviroment later
-autoencoder2.fit(x_train, x_train,
-                epochs=1000,
+# Train the main model for 100 epochs
+autoencoder.fit(x_train, x_train,
+                epochs=100,
                 batch_size=256,
                 shuffle=True,
                 # Display only for validation loss val_loss
                 validation_data=(x_test, x_test))
 
-# encode and decode some digits
-encoded_imgs2 = encoder2.predict(x_test)
-decoded_imgs2 = decoder2.predict(encoded_imgs2)
+"""
+Encoding and decoding samples
+"""
+encoded_imgs = encoder.predict(x_test)
+decoded_imgs = decoder.predict(encoded_imgs)
 
-# Using pyplot to display n sample results
+"""
+Results
+"""
 n = 10 
-plt.figure(figsize=(20, 4))
+plt.figure(figsize=(10, 2))
 for i in range(n):
     # display original
     ax = plt.subplot(2, n, i + 1)
@@ -85,49 +89,17 @@ for i in range(n):
 
     # display reconstruction
     ax = plt.subplot(2, n, i + 1 + n)
-    plt.imshow(decoded_imgs2[i].reshape(28, 28))
+    plt.imshow(decoded_imgs[i].reshape(28, 28))
     plt.gray()
     ax.get_xaxis().set_visible(False)
     ax.get_yaxis().set_visible(False)
 plt.show()
 
 
-#
-# EXPORT THE MODELS USING JSON
-#serialize model to JSON
-model_json = autoencoder2.to_json()
-with open("autoencoder.json", "w") as json_file:
-    json_file.write(model_json)
-# serialize weights to HDF5
-autoencoder2.save_weights("autoencoder.h5")
-print("Saved model to disk")
-
-# serialize model to JSON
-model_json = encoder2.to_json()
-with open("encoder.json", "w") as json_file:
-    json_file.write(model_json)
-# serialize weights to HDF5
-encoder2.save_weights("encoder.h5")
-print("Saved model to disk")
-
-# serialize model to JSON
-model_json = decoder2.to_json()
-with open("decoder.json", "w") as json_file:
-    json_file.write(model_json)
-# serialize weights to HDF5
-decoder2.save_weights("decoder.h5")
-print("Saved model to disk")
-
-# 
-# DOWNLOADING THE EXPORTED MODELS 
-# Save the models somewhere in Google Drive to allow to be imported to the testing environment
-
-from google.colab import files
-
-files.download('autoencoder.json')
-files.download('encoder.json')
-files.download('encoder.h5')
-files.download('decoder.json')
-files.download('decoder.h5')
-
-# end of training environment
+"""
+Export models - json files
+"""
+from custom_functions import save_model
+save_model(autoencoder, "autoencoder")
+save_model(encoder, "encoder")
+save_model(decoder, "decoder")
